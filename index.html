@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://*.googleusercontent.com; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; media-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <title>Sistem Kasir Daeng - Eceran Custom Satuan</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1a252f">
+    <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+
+    <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Terhubung ke CSS dengan Cache Busting -->
+    <link rel="stylesheet" href="css/style.css?v=4.25">
+    <!-- BARU 4.21: tampilan tablet & laptop (HP tidak terpengaruh) -->
+    <link rel="stylesheet" href="css/desktop.css?v=4.25">
+</head>
+<body>
+
+    <div id="toastBox" class="toast-container"></div>
+
+    <div id="updateOverlay" class="modal-overlay" style="z-index: 20000;">
+        <div class="modal-box" style="text-align: center;">
+            <div class="update-spinner"></div>
+            <div class="modal-title">Memperbarui Aplikasi...</div>
+            <div class="modal-msg" style="margin-bottom: 0;">Mohon tunggu sebentar, jangan tutup aplikasi.</div>
+        </div>
+    </div>
+
+    <div id="receiptModal" class="modal-overlay">
+        <div class="modal-box" style="background: #eef2f5;">
+            <div id="receiptArea" class="receipt-container"></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: clamp(8px, 2vw, 10px); margin-top: 15px;">
+                <button class="btn-thumb" style="background: var(--border); color: #333;" onclick="closeModal('receiptModal')">TUTUP</button>
+                <button class="btn-thumb btn-success" onclick="window.print()">🖨️ CETAK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="customAlert" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title" id="alertTitle" style="color: var(--danger);">Peringatan</div>
+            <div class="modal-msg" id="alertMsg">Pesan</div>
+            <button class="btn-primary" onclick="closeModal('customAlert')">MENGERTI</button>
+        </div>
+    </div>
+
+    <div id="customConfirm" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title" id="confirmTitle">Konfirmasi</div>
+            <div class="modal-msg" id="confirmMsg" style="word-break: break-word;">Apakah Anda yakin?</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: clamp(8px, 2vw, 10px);">
+                <button class="btn-thumb" style="background: var(--border); color: #333;" onclick="closeModal('customConfirm')">BATAL</button>
+                <button class="btn-thumb btn-danger" id="confirmBtnYes">YA, LANJUT</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="customPrompt" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title" id="promptTitle">Input Data</div>
+            <div class="modal-msg" id="promptMsg" style="margin-bottom: 10px;">Masukkan data:</div>
+            <input type="text" id="promptInput" style="margin-bottom: 20px; text-align: center; font-size: clamp(1.2rem, 5vw, 1.5rem);" autocomplete="off">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: clamp(8px, 2vw, 10px);">
+                <button class="btn-thumb" style="background: var(--border); color: #333;" onclick="closeModal('customPrompt')">BATAL</button>
+                <button class="btn-thumb btn-success" id="promptBtnSave">SIMPAN</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="cartQtyModal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title" id="cartEditTitle">Ubah Data</div>
+            <div class="modal-msg" id="cartQtyMsg">Beras - Kg</div>
+            <input type="hidden" id="cartQtyId">
+            <input type="text" id="cartQtyInput" inputmode="decimal" style="margin-bottom: 20px; text-align: center; font-size: clamp(2rem, 8vw, 2.5rem); font-weight: 900; color: var(--success); padding: 10px;" placeholder="0">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: clamp(8px, 2vw, 10px);">
+                <button class="btn-thumb" style="background: var(--border); color: #333;" onclick="closeModal('cartQtyModal')">BATAL</button>
+                <button class="btn-thumb btn-success" onclick="saveCartQty()">SIMPAN</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="debtPaymentModal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title" style="color: var(--success);">Bayar Piutang</div>
+            <div class="modal-msg" id="debtPaymentMsg" style="margin-bottom: 10px; font-size: clamp(0.9rem, 3.5vw, 1rem);">Sisa Hutang: Rp 0</div>
+            <input type="hidden" id="debtPaymentId">
+            <input type="hidden" id="debtMaxAmount">
+            
+            <button class="btn-thumb" style="background: var(--primary); color: white; width: 100%; margin-bottom: 15px; font-weight: 900;" onclick="setLunasAmount()">
+                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                LUNASKAN SEMUA
+            </button>
+
+            <label style="font-size: clamp(0.75rem, 2.5vw, 0.85rem); text-align: center; width: 100%; display: block; margin-bottom: 5px;">Atau Ketik Cicilan (Rp)</label>
+            <input type="text" id="debtPaymentInput" inputmode="numeric" style="margin-bottom: 20px; text-align: center; font-size: clamp(1.4rem, 6vw, 1.8rem); font-weight: 900; color: var(--success);" placeholder="0" oninput="formatRupiahUI(this)">
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: clamp(8px, 2vw, 10px);">
+                <button class="btn-thumb" style="background: var(--border); color: #333;" onclick="closeModal('debtPaymentModal')">BATAL</button>
+                <button class="btn-thumb btn-success" onclick="processDebtPayment()">PROSES</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="unitSelectModal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title">Pilih Satuan</div>
+            <div id="unitSelectContainer" style="display: grid; grid-template-columns: 1fr 1fr; gap: clamp(8px, 2vw, 10px); max-height: 250px; overflow-y: auto; padding-bottom: 10px;">
+            </div>
+            <button class="btn-thumb" style="background: var(--danger); color: white; width: 100%; margin-top: 15px;" onclick="closeModal('unitSelectModal')">TUTUP</button>
+        </div>
+    </div>
+
+    <input type="file" id="profileUploader" accept="image/*" class="visually-hidden">
+    <input type="file" id="csvUploader" accept=".csv, text/csv, application/csv, text/comma-separated-values" class="visually-hidden">
+
+    <div class="modal-overlay" id="profileViewModal">
+        <div class="modal-box" style="padding: clamp(20px, 5vw, 25px) clamp(15px, 4vw, 20px);">
+            <div style="text-align: center; margin-bottom: 20px; position: relative;">
+                <img src="assets/icons/icon-192.png" id="viewProfileImg" class="prof-compact-pic" style="width: clamp(60px, 15vw, 80px); height: clamp(60px, 15vw, 80px); margin: 0 auto 10px auto; border-color: var(--success); padding: 2px;">
+                
+                <button type="button" class="profile-upload-btn" onclick="document.getElementById('profileUploader').click()">Ubah Foto</button>
+
+                <h2 style="margin:15px 0 0 0; font-size: clamp(1.2rem, 5vw, 1.5rem); font-weight:900; color: var(--primary);" id="viewProfileName">Kasir Lokal</h2>
+                <p style="margin:5px 0 0 0; font-size: clamp(0.75rem, 3vw, 0.85rem); color: var(--text); font-weight:700;" id="viewLoginStatus">Offline Mode (Guest)</p>
+            </div>
+            
+            <div class="prof-detail-grid">
+                <div class="prof-detail-box">
+                    <span class="prof-detail-label">Total Omzet</span>
+                    <p class="prof-detail-val" style="color: var(--success);" id="viewTotalOmzet">Rp 0</p>
+                </div>
+                <div class="prof-detail-box">
+                    <span class="prof-detail-label">Total Piutang</span>
+                    <p class="prof-detail-val" style="color: var(--danger);" id="viewTotalPiutang">Rp 0</p>
+                </div>
+                
+                <div class="prof-detail-box" style="grid-column: span 2; display:flex; justify-content:space-between; align-items:center; border-color: var(--accent); gap: 10px;">
+                    <div style="text-align: left; flex: 1; min-width: 0;">
+                        <span class="prof-detail-label">Akun Cloud</span>
+                        <p class="prof-detail-val" id="viewGoogleEmail" style="color:var(--text); font-size: clamp(0.8rem, 3.5vw, 0.95rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Tidak Terhubung</p>
+                    </div>
+                    <button id="btnGoogleLink" class="btn-edit-small" style="background: var(--accent); padding: clamp(8px, 2.5vw, 10px) clamp(10px, 3vw, 15px); font-size:clamp(0.7rem, 2.5vw, 0.85rem); border-radius: 8px; flex-shrink: 0;" onclick="handleGoogleAuthClick()">
+                        <svg class="icon-svg" style="width: 16px; height: 16px; margin-right:4px;" viewBox="0 0 24 24" fill="currentColor"><path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.345-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0c-6.635 0-12 5.365-12 12s5.365 12 12 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z"/></svg> 
+                        <span id="textGoogleLink">Login</span>
+                    </button>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <span class="prof-detail-label" style="text-align: center; margin-bottom: 10px;">Support Developer</span>
+                <div class="sosmed-container">
+                    <a href="https://www.instagram.com/daengtio_?igsh=MXY4dTVhMGEzNDJxZA==" target="_blank" rel="noopener noreferrer" class="btn-sosmed ig">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+                        Instagram
+                    </a>
+                    <a href="https://www.tiktok.com/@daengtio_0?_r=1&_t=ZS-94Cu2soiSXJ" target="_blank" rel="noopener noreferrer" class="btn-sosmed tt">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg>
+                        TikTok
+                    </a>
+                    <a href="https://sociabuzz.com/engyourbae/tribe" target="_blank" rel="noopener noreferrer" class="btn-sosmed sw">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        Traktir Kopi
+                    </a>
+                </div>
+            </div>
+            <button class="btn-thumb" style="width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--primary);" onclick="closeModal('profileViewModal')">TUTUP</button>
+        </div>
+    </div>
+
+    <div id="loginModal" class="modal-overlay">
+        <div class="modal-box" style="padding: clamp(20px, 6vw, 30px);">
+            <h2 style="justify-content: center; border:none; margin-bottom: 5px; font-size: clamp(1.2rem, 5vw, 1.5rem);">☁️ CLOUD SYNC</h2>
+            <p style="font-size:clamp(0.85rem, 3.5vw, 1rem); color:#666; margin-bottom: 25px; font-weight: 700; text-align: center;">Simpan data permanen dan sinkronisasi otomatis. Aman walau HP offline.</p>
+            <button class="btn-thumb" onclick="loginGoogle()" style="background: #fff; color: #111; border: 2px solid #ddd; margin-bottom: 15px; font-size: clamp(0.95rem, 4vw, 1.1rem); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 8px;"><path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.345-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0c-6.635 0-12 5.365-12 12s5.365 12 12 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z"/></svg> 
+                Login dengan Google
+            </button>
+            <button class="btn-thumb" onclick="closeModal('loginModal')" style="background: var(--bg); color: #555;">Nanti Saja (Guest)</button>
+        </div>
+    </div>
+    
+    <div id="filterTimeModal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title">Pilih Waktu Riwayat</div>
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
+                <button class="btn-thumb" style="background: var(--bg); border: 2px solid var(--border); color: var(--primary); text-align: left; padding: 15px; font-weight: 900; justify-content: flex-start;" onclick="selectHistoryFilter('today', 'Hari Ini')">Hari Ini</button>
+                <button class="btn-thumb" style="background: var(--bg); border: 2px solid var(--border); color: var(--primary); text-align: left; padding: 15px; font-weight: 900; justify-content: flex-start;" onclick="selectHistoryFilter('3days', '3 Hari Terakhir')">3 Hari Terakhir</button>
+                <button class="btn-thumb" style="background: var(--bg); border: 2px solid var(--border); color: var(--primary); text-align: left; padding: 15px; font-weight: 900; justify-content: flex-start;" onclick="selectHistoryFilter('7days', '7 Hari Terakhir')">7 Hari Terakhir</button>
+                <button class="btn-thumb" style="background: var(--bg); border: 2px solid var(--border); color: var(--primary); text-align: left; padding: 15px; font-weight: 900; justify-content: flex-start;" onclick="selectHistoryFilter('all', 'Semua Riwayat')">Semua Riwayat</button>
+            </div>
+            <button class="btn-thumb" style="background: var(--danger); color: white; width: 100%;" onclick="closeModal('filterTimeModal')">TUTUP</button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        
+        <div class="panel">
+            <div class="user-profile" onclick="openProfileView()">
+                <div class="prof-compact-left">
+                    <img src="assets/icons/icon-192.png" id="headProfileImg" class="prof-compact-pic">
+                    <div>
+                        <span style="font-size: clamp(0.65rem, 2.5vw, 0.75rem); color: var(--text); opacity: 0.8; display: block; line-height: 1;">KASIR AKTIF</span>
+                        <span id="userNameDisplay" style="font-size: clamp(0.9rem, 3.5vw, 1.1rem); font-weight: 900; color: var(--primary);">Kasir Lokal</span>
+                    </div>
+                </div>
+                <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                    <span id="networkStatus" class="status-sync sync-offline">Menyiapkan...</span>
+                    <span onclick="event.stopPropagation(); toggleMute();" style="cursor: pointer; background: var(--surface); border: 1px solid var(--accent); color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; box-shadow: 0 2px 4px rgba(0,0,0,0.05); user-select: none; display: flex; align-items: center; gap: 4px;">
+                        Suara: <span id="muteBtnIcon" style="display: flex; align-items: center;"></span>
+                    </span>
+                </div>
+            </div> 
+            
+            <div class="shop-banner" id="shopNameDisplay">EDIT NAMA TOKO</div>
+            
+            <h2 class="header-toggle">
+                <div class="title-wrap">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    <span>MANAJEMEN SATUAN</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: clamp(6px, 2vw, 10px);">
+                    <button class="btn-edit-small" onclick="requestShopNameEdit()">EDIT TOKO</button>
+                    <span id="unitToggleIcon" class="toggle-btn-std" onclick="toggleUI('unitContent', 'unitToggleIcon')">TUTUP [-]</span>
+                </div>
+            </h2>
+            <div class="panel-wrapper" id="unitContent">
+                <div class="panel-content">
+                    <div class="panel-inner" style="border-bottom: 2px dashed var(--border); margin-bottom: 15px;">
+                        <div style="display: flex; gap: clamp(6px, 2vw, 10px);">
+                            <input type="text" id="unitName" placeholder="Ketik Kg, Ons..." style="text-transform: capitalize;">
+                            <button class="btn-primary" onclick="addUnit()" style="width: clamp(90px, 25vw, 120px); font-size: clamp(0.85rem, 3vw, 1rem);">TAMBAH</button>
+                        </div>
+                        <div id="unitTags" style="margin-top: 15px; display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <h2 class="header-toggle" onclick="toggleUI('dbContent', 'dbToggleIcon')">
+                <div class="title-wrap">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                    <span>DATABASE BARANG</span>
+                </div>
+                <span id="dbToggleIcon" class="toggle-btn-std">TUTUP [-]</span>
+            </h2>
+            <div class="panel-wrapper" id="dbContent">
+                <div class="panel-content">
+                    <div class="panel-inner">
+                        
+                        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                            <button class="btn-csv" onclick="triggerDownloadCSV()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                Download CSV
+                            </button>
+                            <button class="btn-csv" onclick="triggerCSVUpload()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                Upload CSV
+                            </button>
+                        </div>
+
+                        <div class="form-group">
+                            <input type="text" id="itemName" placeholder="Nama Barang (Cth: Pampers / Gandum)" style="text-transform: capitalize;">
+                        </div>
+                        <div style="display: flex; gap: clamp(6px, 2vw, 10px); margin-bottom: 15px;">
+                            <input type="text" id="itemPrice" inputmode="numeric" placeholder="Harga / Satuan (Rp)" style="flex: 2;" oninput="formatRupiahUI(this)">
+                            <div id="itemUnitDisplay" class="custom-select" style="flex: 1;" onclick="openUnitSelectModal()">
+                                <span id="itemUnitText">BKS</span>
+                                <span>▼</span>
+                            </div>
+                            <input type="hidden" id="itemUnitVal" value="Bks">
+                        </div>
+
+                        <button class="eceran-toggle-btn" id="btnToggleEceran" onclick="toggleUI('eceranBox', 'btnToggleEceranText')" style="width:100%; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+                            <span id="btnToggleEceranText">Atur Grosir / Eceran Cepat [+]</span>
+                        </button>
+
+                        <div id="eceranBox" class="panel-wrapper collapsed" style="margin-bottom: 15px;">
+                            <div class="panel-content">
+                                <div class="eceran-box active">
+                                    <p style="font-size:clamp(0.7rem, 2.5vw, 0.8rem); color:var(--warning); font-weight:800; margin-bottom:10px; line-height:1.4;">
+                                        Atur harga eceran custom! (Misal: Pampers 1 Bks, Ecerannya = Rp 3500 dapat 1 Pcs). Kosongkan jika tidak perlu.
+                                    </p>
+                                    
+                                    <div class="eceran-grid-row">
+                                        <div class="eceran-col-uang">
+                                            <label>Slot 1 (Rp)</label>
+                                            <input type="text" id="eceranNominal" inputmode="numeric" placeholder="Cth: 3500" oninput="formatRupiahUI(this)">
+                                        </div>
+                                        <div class="eceran-col-qty">
+                                            <label>Dapat</label>
+                                            <input type="text" id="eceranQty" inputmode="decimal" placeholder="Cth: 1">
+                                        </div>
+                                        <div class="eceran-col-satuan">
+                                            <label>Satuan</label>
+                                            <input type="text" id="eceranUnit" placeholder="Cth: Pcs" style="text-transform: capitalize;">
+                                        </div>
+                                    </div>
+
+                                    <div class="eceran-grid-row" style="border-bottom: none; padding-bottom: 0;">
+                                        <div class="eceran-col-uang">
+                                            <label>Slot 2 (Rp)</label>
+                                            <input type="text" id="eceranNominal2" inputmode="numeric" placeholder="Cth: 10000" oninput="formatRupiahUI(this)">
+                                        </div>
+                                        <div class="eceran-col-qty">
+                                            <label>Dapat</label>
+                                            <input type="text" id="eceranQty2" inputmode="decimal" placeholder="Cth: 3">
+                                        </div>
+                                        <div class="eceran-col-satuan">
+                                            <label>Satuan</label>
+                                            <input type="text" id="eceranUnit2" placeholder="Cth: Pcs" style="text-transform: capitalize;">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn-primary" onclick="addInventory()" style="margin-bottom: 20px;">SIMPAN BARANG</button>
+
+                        <input type="text" id="searchInventoryInput" placeholder="Cari / Saring Tabel..." style="border-color: var(--accent); margin-bottom: 10px;">
+                        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                            <table>
+                                <tbody id="inventoryList"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="panel">
+            <h2 style="color: var(--success); border-bottom: 3px solid var(--success);">
+                <div class="title-wrap">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                    <span>MEJA KASIR UTAMA</span>
+                </div>
+            </h2>
+            
+            <div style="display: flex; gap: clamp(6px, 2vw, 10px); margin-bottom: 15px; align-items: flex-start;">
+                <div class="form-group search-container" style="flex: 2; margin-bottom: 0;">
+                    <label>Cari & Pilih Barang</label>
+                    <div class="autocomplete-wrapper">
+                    <input type="text" id="searchInput" placeholder="Ketik nama barang..." autocomplete="off" style="border-color: var(--success); border-width: 2px; text-transform: capitalize; font-size: clamp(1.2rem, 5vw, 1.4rem); font-weight: 900;">
+                    </div>
+                    <div id="searchResults"></div>
+                    
+                    <input type="hidden" id="selectedItemName">
+                    <input type="hidden" id="selectedItemPrice">
+                    <input type="hidden" id="selectedItemUnit">
+                </div>
+
+                <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                    <label>Qty / Kuantitas</label>
+                    <input type="text" id="itemQty" inputmode="decimal" value="1" style="border-color: var(--primary); border-width: 2px; text-align: center; font-size: clamp(1.2rem, 5vw, 1.4rem); font-weight: 900;">
+                    
+                    <div style="display: flex; gap: 5px; margin-top: 8px;">
+                        <button class="btn-thumb" style="background:var(--border); color:var(--primary); padding:clamp(6px, 2vw, 8px); flex:1;" onclick="setQuickQty(1)">1</button>
+                        <button class="btn-thumb" style="background:var(--border); color:var(--primary); padding:clamp(6px, 2vw, 8px); flex:1;" onclick="setQuickQty(0.5)">0.5</button>
+                        <button class="btn-thumb" style="background:var(--border); color:var(--primary); padding:clamp(6px, 2vw, 8px); flex:1;" onclick="setQuickQty(0.1)">0.1</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="scaleHelper" class="nominal-box">
+                <div class="nominal-title">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"></path><path d="M10 22h4"></path><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1.45.62 2.84 1.5 3.5.76.76 1.23 1.52 1.41 2.5"></path></svg>
+                    <span>Hitung Otomatis Berdasarkan Uang Pembeli</span>
+                </div>
+                <div class="scale-input-row">
+                    <input type="text" id="nominalInput" inputmode="numeric" placeholder="Ketik uang (Rp)..." class="scale-input" oninput="formatRupiahUI(this); calculateScaleFromInput();">
+                    <div class="scale-info">
+                        <span>Otomatis Dapat: <span class="badge-unit" style="background: yellow; color: var(--danger); font-size: clamp(1rem, 3.5vw, 1.1rem); padding: 2px 6px; width: auto;" id="scaleResultVal">0</span> <span id="scaleResultUnit">Kg</span></span>
+                        <span id="scaleResultDesc" style="color: var(--danger); display: block;">Timbangan: 0 Ons 0 Garis</span>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-success" onclick="addToCart()" style="padding: clamp(15px, 4vw, 18px); font-size: clamp(1.1rem, 4vw, 1.25rem); margin-bottom: 15px;">
+                <svg class="icon-lg" style="margin-right: 8px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                MASUKKAN KERANJANG
+            </button>
+
+            <div class="calc-container">
+                <div id="calcDisplay" class="calc-display">0</div>
+                
+                <div class="calc-btn clear" onclick="calcAction('C')">C</div>
+                <div class="calc-btn op" onclick="calcAction('DEL')">DEL</div>
+                <div class="calc-btn op" onclick="calcAction(':')">:</div>
+                <div class="calc-btn op" onclick="calcAction('X')">X</div>
+                
+                <div class="calc-btn" onclick="calcAction('7')">7</div>
+                <div class="calc-btn" onclick="calcAction('8')">8</div>
+                <div class="calc-btn" onclick="calcAction('9')">9</div>
+                <div class="calc-btn op" onclick="calcAction('-')">-</div>
+                
+                <div class="calc-btn" onclick="calcAction('4')">4</div>
+                <div class="calc-btn" onclick="calcAction('5')">5</div>
+                <div class="calc-btn" onclick="calcAction('6')">6</div>
+                <div class="calc-btn plus-btn" onclick="calcAction('+')">+</div>
+                
+                <div class="calc-btn" onclick="calcAction('1')">1</div>
+                <div class="calc-btn" onclick="calcAction('2')">2</div>
+                <div class="calc-btn" onclick="calcAction('3')">3</div>
+                
+                <div class="calc-btn" onclick="calcAction('0')">0</div>
+                <div class="calc-btn" onclick="calcAction('00')">00</div>
+                <div class="calc-btn" onclick="calcAction('000')">000</div>
+                <div class="calc-btn" style="font-size: clamp(2rem, 8vw, 2.5rem);" onclick="calcAction('.')">.</div>
+                
+                <div class="calc-btn eq-btn" onclick="calcAction('=')">=</div>
+            </div>
+
+            <div class="table-responsive" style="margin-top: 20px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 35%;">Item</th>
+                            <th style="width: 30%; text-align: center;">Qty</th>
+                            <th style="width: 25%;">Subtotal</th>
+                            <th style="width: 10%; text-align: center;">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cartList"></tbody>
+                </table>
+            </div>
+
+            <div class="totals" style="margin-top: 15px; padding-top: 20px; border-top: 2px dashed var(--border);">
+                <div style="display: flex; justify-content: space-between; font-size: clamp(1.2rem, 5vw, 1.4rem); font-weight: 900; margin-bottom: 15px;">
+                    <span>Total Belanja:</span>
+                    <span id="grandTotal" data-val="0" style="color: var(--primary);">Rp 0</span>
+                </div>
+                
+                <div class="form-group" style="margin-top: 15px;">
+    <label>Uang Diterima dari Pembeli (Rp)</label>
+    <input type="text" id="cashInput" inputmode="none" placeholder="Cth: 50.000" oninput="formatRupiahUI(this); calculateChange();" style="font-size: clamp(2rem, 7vw, 2.5rem); font-weight: 900; color: var(--success); padding: clamp(15px, 5vw, 20px); text-align: right; letter-spacing: 2px;">
+</div>
+
+<div class="cash-pad">
+    <div class="cash-btn pas" onclick="cashAction('PAS')">UANG PAS</div>
+    <div class="cash-btn clr" onclick="cashAction('C')">C</div>
+    <div class="cash-btn clr" onclick="cashAction('DEL')">DEL</div>
+
+    <div class="cash-btn bill" onclick="cashAction('+2000')">+2.000</div>
+    <div class="cash-btn bill" onclick="cashAction('+5000')">+5.000</div>
+    <div class="cash-btn bill" onclick="cashAction('+10000')">+10.000</div>
+    <div class="cash-btn bill" onclick="cashAction('+20000')">+20.000</div>
+    <div class="cash-btn bill" onclick="cashAction('+50000')">+50.000</div>
+    <div class="cash-btn bill" onclick="cashAction('+100000')">+100.000</div>
+
+    <div class="cash-btn" onclick="cashAction('7')">7</div>
+    <div class="cash-btn" onclick="cashAction('8')">8</div>
+    <div class="cash-btn" onclick="cashAction('9')">9</div>
+    <div class="cash-btn" onclick="cashAction('4')">4</div>
+    <div class="cash-btn" onclick="cashAction('5')">5</div>
+    <div class="cash-btn" onclick="cashAction('6')">6</div>
+    <div class="cash-btn" onclick="cashAction('1')">1</div>
+    <div class="cash-btn" onclick="cashAction('2')">2</div>
+    <div class="cash-btn" onclick="cashAction('3')">3</div>
+    <div class="cash-btn" onclick="cashAction('0')">0</div>
+    <div class="cash-btn" onclick="cashAction('00')">00</div>
+    <div class="cash-btn" onclick="cashAction('000')">000</div>
+</div>
+
+<div id="changeDisplayBox" class="change-display-container">
+    <div id="changeLabelText" class="change-label">Status / Kembalian</div>
+    <div id="changeDue" class="change-value">Rp 0</div>
+</div>
+
+<div id="debtSection" style="display:none; margin-top:12px;">
+    <label>Nama Penghutang (wajib)</label>
+    <input type="text" id="debtorName" placeholder="Nama pelanggan..." style="text-transform: capitalize; border-color: var(--danger);">
+</div>
+            
+            <button class="btn-primary" onclick="processTransaction()" style="margin-top: 20px; padding: clamp(18px, 6vw, 25px); font-size: clamp(1.2rem, 5vw, 1.5rem); box-shadow: 0 6px 0 #111;">
+                <svg class="icon-lg" style="margin-right: 8px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                SELESAIKAN TRANSAKSI
+            </button>
+        </div>
+        
+        <div class="panel">
+            <h2 class="header-toggle" onclick="toggleUI('debtContent', 'debtToggleIcon')">
+                <div class="title-wrap">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                    <span>BUKU PIUTANG DAGANG</span>
+                </div>
+                <span id="debtToggleIcon" class="toggle-btn-std">TUTUP [-]</span>
+            </h2>
+            <div class="panel-wrapper" id="debtContent">
+                <div class="panel-content">
+                    <div class="panel-inner">
+                        <input type="text" id="searchDebtInput" placeholder="Saring nama penghutang..." oninput="renderDebts()" style="margin-bottom: 15px; border-color: var(--warning);">
+                        <div class="table-responsive">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width: 20%;">Tanggal</th>
+                                        <th style="width: 35%;">Nama Pelanggan</th>
+                                        <th style="width: 25%;">Hutang</th>
+                                        <th style="width: 20%; text-align: center;">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="debtList"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2 class="header-toggle" onclick="toggleUI('historyContent', 'historyToggleIcon')">
+                <div class="title-wrap">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                    <span>DASBOR & RIWAYAT SESI</span>
+                </div>
+                <span id="historyToggleIcon" class="toggle-btn-std">TUTUP [-]</span>
+            </h2>
+            <div class="panel-wrapper" id="historyContent">
+                <div class="panel-content">
+                    <div class="panel-inner">
+                        
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: #e8f4fd; padding: 10px; border-radius: 8px; border: 1px dashed var(--accent);">
+                            <span style="font-size: 0.85rem; font-weight: 900; color: var(--primary);">Pilih Waktu:</span>
+                            <div class="custom-select" style="width: auto; padding: 8px 15px; font-size: 0.85rem; background: #fff; border-color: var(--accent); min-width: 140px; justify-content: space-between; border-width: 2px;" onclick="document.getElementById('filterTimeModal').classList.add('active'); playTick();">
+                                <span id="historyFilterText">Hari Ini</span>
+                                <span style="margin-left: 10px;">▼</span>
+                            </div>
+                            <input type="hidden" id="historyFilterVal" value="today">
+                        </div>
+
+                        <div class="dash-grid">
+                            <div class="dash-box" style="background: var(--primary);">
+                                <span>OMZET TERCATAT</span>
+                                <strong id="dailyOmzet">Rp 0</strong>
+                            </div>
+                            <div class="dash-box" style="background: var(--success);">
+                                <span>TUNAI MASUK</span>
+                                <strong id="dailyCash">Rp 0</strong>
+                            </div>
+                            <div class="dash-box" style="background: var(--danger);">
+                                <span>PIUTANG BARU</span>
+                                <strong id="dailyDebt">Rp 0</strong>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                            <button class="btn-danger" style="padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: none; cursor: pointer;" onclick="confirmClearHistory()">
+                                <div style="display: flex; align-items: center; gap: 5px; font-weight: 900; font-size: clamp(0.7rem, 2.5vw, 0.85rem);">
+                                    <svg class="icon-svg" style="margin:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path></svg>
+                                    HAPUS RIWAYAT
+                                </div>
+                                <span id="deleteBtnLabel" style="font-size: 0.65rem; background: rgba(0,0,0,0.2); padding: 3px 8px; border-radius: 4px; font-weight: bold; color: #fff;">HARI INI</span>
+                            </button>
+                            <button style="background: var(--warning); color: white; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: none; cursor: pointer;" onclick="confirmClearDashboard()">
+                                <div style="display: flex; align-items: center; gap: 5px; font-weight: 900; font-size: clamp(0.7rem, 2.5vw, 0.85rem);">
+                                    <svg class="icon-svg" style="margin:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><polyline points="16 16 21 16 21 21"></polyline></svg>
+                                    RESET OMZET
+                                </div>
+                                <span id="deleteDashLabel" style="font-size: 0.65rem; background: rgba(0,0,0,0.2); padding: 3px 8px; border-radius: 4px; font-weight: bold; color: #fff;">HARI INI</span>
+                            </button>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width: 25%;">Waktu</th>
+                                        <th style="width: 35%;">Detail Pembelian</th>
+                                        <th style="width: 25%;">Total & Tunai</th>
+                                        <th style="width: 15%; text-align: center;">Cetak</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historyList"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="appVersionLabel" style="text-align:center; font-size:0.7rem; opacity:0.6; padding:10px 0 25px 0;"></div>
+
+    <!-- Terhubung ke JS dengan Cache Busting -->
+    <script src="js/config.js?v=4.25"></script>
+    <script src="js/main.js?v=4.25"></script>
+    <!-- BARU 4.21: mode layar besar + keyboard (dimuat setelah main.js) -->
+<script src="js/keyboard.js?v=4.25"></script>
+<script src="js/voice.js?v=4.25"></script>
+</body>
+</html>
