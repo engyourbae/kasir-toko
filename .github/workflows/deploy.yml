@@ -1,0 +1,41 @@
+# Deploy ke GitHub Pages; config.js dibuat saat build dari GitHub Secrets.
+# Siapkan: Settings > Secrets and variables > Actions > New repository secret:
+#   SUPABASE_URL, SUPABASE_ANON_KEY.  Lalu Settings > Pages > Source: "GitHub Actions".
+name: Deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Buat js/config.js dari secrets
+        run: node scripts/build-config.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      - name: Kumpulkan file yang dipublikasikan
+        run: |
+          mkdir dist
+          cp -r index.html sw.js manifest.json css js assets dist/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
